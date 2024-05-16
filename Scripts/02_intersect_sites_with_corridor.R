@@ -84,10 +84,13 @@
   plot(df_boundaries)
   
   # What is the best project for this geography?
-  zoi_crs <- suggest_crs(df_boundaries) %>% slice(1) %>% pull(crs_code) %>% as.numeric() 
+  zoi_crs <- suggest_crs(df_boundaries) %>% 
+    slice(1) %>% 
+    pull(crs_code) %>% 
+    as.numeric() 
 
   
-  # Geoprocesses corridor files with buffers included
+  # Geoprocessed corridor files with buffers included
   # Name each list object using shapefile core name parts
   # Assign the ZOI projection as well so we don't have to do this later
   df_geo <- 
@@ -100,7 +103,6 @@
     ggplot() + 
     geom_sf(data = df_boundaries) +
     geom_sf()
-  df_geo$TAH_Corridor_5KM
 
 
 # STANDARDIZE CRS ---------------------------------------------------------
@@ -126,25 +128,44 @@
 # INTERSECT DATA -------------------------------------------------------------------
 
   # Now, let's intersect our api site level data with each of the 3 buffers
+  relevel_buffer <- function(x){
+    fct_relevel(x %>% as.factor, c("TRUE", "FALSE"))
+  }
   
-  tmp <- df_api_pts %>% 
+  fac_count <- function(df, col){
+    df %>% 
+      filter({{col}} == TRUE) %>% 
+      count() %>% 
+      pull(n)
+  }
+  
+  df_pts_buffered <- df_api_pts %>% 
     filter(is_usaid == TRUE) %>% 
-    mutate(within_buffer = st_within(geometry, df_geo$TAH_Corridor_5KM, sparse = F),
-           within_buffer = fct_relevel(within_buffer %>% as.factor, c("TRUE", "FALSE")))
+    mutate(within_buffer_5km = st_within(geometry, df_geo$TAH_Corridor_5KM, sparse = F) %>% 
+             relevel_buffer(),
+           within_buffer_10km = st_within(geometry, df_geo$TAH_Corridor_10KM, sparse = F) %>% 
+             relevel_buffer(),
+           within_buffer_25km = st_within(geometry, df_geo$TAH_Corridor_25KM, sparse = F) %>% 
+             relevel_buffer()
+           )
   
-  fac_count <- tmp %>% filter(within_5km == TRUE) %>% count() %>% pull(n)
+  # Get counts for different viz/map products
+  fac_count_5km <- fac_count(df_pts_buffered, within_buffer_5km)
+  fac_count_10km <- fac_count(df_pts_buffered, within_buffer_10km)
+  fac_count_25km <- fac_count(df_pts_buffered, within_buffer_25km)
+  
   
   # Prototype map
-  tmp %>% 
+  df_pts_buffered %>% 
     ggplot() +
     geom_sf(data = df_boundaries, fill = grey10k) +
     geom_sf(data = df_geo$TAH_Corridor_5KM, aes(fill = grey40k), alpha = 0.5) +
     geom_sf(data = df_geo$TAH_Corridor_of_interrest, color = hw_orchid_bloom) +
-    geom_sf(aes(color = within_buffer), alpha = 0.75) +
+    geom_sf(aes(color = within_buffer_5km, alpha = ifelse(within_buffer_5km == "TRUE", 1, 0.25))) +
     coord_sf(xlim = c(bbox[1], bbox[3]), ylim = c(bbox[2], bbox[4])) +
     scale_fill_identity() +
     scale_color_manual(values = c("TRUE" = hw_orchid_bloom, "FALSE" = hw_slate), ) +
-    labs(title = glue::glue("{fac_count} facilities fall within 5 kilometers of the Lobito Corridor.")) +
+    labs(title = glue::glue("{fac_count_5km} facilities fall within 5 kilometers of the Lobito Corridor.")) +
     si_style_map()
 
 
