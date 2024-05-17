@@ -36,6 +36,7 @@
   
   lobito_cor <- list.files("GIS", pattern = "TAH_.*.shp$", full.names = T)
   
+  source("Scripts/00_helpers.r")
 
 # FUNCTIONS ---------------------------------------------------------------
 
@@ -81,6 +82,11 @@
                                       username = datim_user(),
                                       password = datim_pwd()))
   
+  df_zmb_psnus <- extract_boundaries(spdf_pepfar, country = "Zambia",
+                                      level = 5,
+                                      username = datim_user(),
+                                      password = datim_pwd())
+  
   plot(df_boundaries)
   
   # What is the best project for this geography?
@@ -113,6 +119,7 @@
   check_proj(st_crs(df_boundaries))
   
   df_boundaries <- st_transform(df_boundaries, crs = zoi_crs)
+  df_zmb_psnus <- st_transform(df_zmb_psnus, crs = zoi_crs)
   
   df_api_pts <- st_as_sf(df_api %>% filter(!is.na(latitude)),
                      coords = c("longitude", "latitude"), crs = 4326) %>% 
@@ -132,9 +139,11 @@
     fct_relevel(x %>% as.factor, c("TRUE", "FALSE"))
   }
   
+  # Need to remove sites with multiple partners reporting -- use distinct
   fac_count <- function(df, col){
     df %>% 
       filter({{col}} == TRUE) %>% 
+      distinct(orgunituid) %>% 
       count() %>% 
       pull(n)
   }
@@ -151,25 +160,51 @@
   
   # Get counts for different viz/map products
   fac_count_5km <- fac_count(df_pts_buffered, within_buffer_5km)
+  df_pts_buffered %>% 
+    filter(within_buffer_5km == TRUE) %>% 
+    distinct(orgunituid, operatingunit) %>% 
+    count(operatingunit)
+  
   fac_count_10km <- fac_count(df_pts_buffered, within_buffer_10km)
   fac_count_25km <- fac_count(df_pts_buffered, within_buffer_25km)
-  
-  
-  # Prototype map
-  df_pts_buffered %>% 
-    ggplot() +
-    geom_sf(data = df_boundaries, fill = grey10k) +
-    geom_sf(data = df_geo$TAH_Corridor_5KM, aes(fill = grey40k), alpha = 0.5) +
-    geom_sf(data = df_geo$TAH_Corridor_of_interrest, color = hw_orchid_bloom) +
-    geom_sf(aes(color = within_buffer_5km, alpha = ifelse(within_buffer_5km == "TRUE", 1, 0.25))) +
-    coord_sf(xlim = c(bbox[1], bbox[3]), ylim = c(bbox[2], bbox[4])) +
-    scale_fill_identity() +
-    scale_color_manual(values = c("TRUE" = hw_orchid_bloom, "FALSE" = hw_slate), ) +
-    labs(title = glue::glue("{fac_count_5km} facilities fall within 5 kilometers of the Lobito Corridor.")) +
-    si_style_map()
-
 
 
 # VIZ ---------------------------------------------------------------------
+ 
+  #Basic Map
+   df_pts_buffered %>% 
+    ggplot() +
+    geom_sf(data = df_boundaries, fill = grey10k) +
+    geom_sf(data = df_zmb_psnus %>% filter(orgunit == "Ndola District"), fill = grey20k) +
+    geom_sf(data = df_geo$TAH_Corridor_5KM, aes(fill = grey40k), alpha = 0.5) +
+    geom_sf(data = df_geo$TAH_Corridor_of_interrest, color = hw_slate) +
+    geom_sf(aes(color = within_buffer_5km, alpha = ifelse(within_buffer_5km == "TRUE", 1, 0.25)), linewidth = 1) +
+    coord_sf(xlim = c(bbox[1], bbox[3]), ylim = c(bbox[2], bbox[4])) +
+    scale_fill_identity() +
+    scale_color_manual(values = c("TRUE" = hw_orchid_bloom, "FALSE" = hw_slate), ) +
+    labs(title = glue::glue("From Kitwe, Zambia to Lobito, Angola USAID supports {fac_count_5km} facilities through PEPFAR\n that are within a 5 kilometer range of the Lobito Corridor"),
+         caption = "Source: PEPFAR DATIM 2024-05-16 | Notes: Count does not include facilities with missing coordinates") +
+    si_style_map() 
+  si_save("Graphics/Lobito_sites.svg")
 
-
+  # Of those sites supported, what areas report into DATIM?
+ site_list_themes <-  df_pts_buffered %>%
+    st_drop_geometry() %>% 
+    filter(within_buffer_5km == TRUE) %>% 
+    select(operatingunit, orgunituid, psnu, facility, has_prev_agyw_prev:has_hss_sc_curr) %>% 
+    rowwise() %>% 
+    mutate(count = sum(c_across(has_prev_agyw_prev:has_hss_sc_curr), na.rm = T)) %>% 
+    pivot_longer(has_prev_agyw_prev:has_hss_sc_curr, values_drop_na = TRUE) %>%
+    mutate(theme = str_extract(name, "(?<=_)[^_]+(?=_)")) %>% 
+    distinct(operatingunit, orgunituid, facility, theme) %>% 
+    mutate(n = 1) %>% 
+    group_by(operatingunit, theme) %>% 
+    summarise(count = sum(n, na.rm = T)) %>% 
+    spread(theme, count)
+    
+    # wHAT MECHANISMS ARE SUPPORTED IN EACH COUNTRY
+    df_pts_buffered %>% 
+    st_drop_geometry() %>% 
+      filter(within_buffer_5km == TRUE) %>% 
+      count(operatingunit)
+    
