@@ -25,8 +25,6 @@
   library(grabr)
   library(crsuggest)
 
-
-
 # GLOBAL VARIABLES --------------------------------------------------------
   
   load_secrets()
@@ -87,7 +85,7 @@
                                       username = datim_user(),
                                       password = datim_pwd())
   
-  plot(df_boundaries)
+  gview(df_boundaries)
   
   # What is the best project for this geography?
   zoi_crs <- suggest_crs(df_boundaries) %>% 
@@ -148,6 +146,7 @@
       pull(n)
   }
   
+  # Create intersected tags at site level for each buffer; Use this to count sites along corridor.
   df_pts_buffered <- df_api_pts %>% 
     filter(is_usaid == TRUE) %>% 
     mutate(within_buffer_5km = st_within(geometry, df_geo$TAH_Corridor_5KM, sparse = F) %>% 
@@ -171,40 +170,52 @@
 
 # VIZ ---------------------------------------------------------------------
  
-  #Basic Map
-   df_pts_buffered %>% 
-    ggplot() +
-    geom_sf(data = df_boundaries, fill = grey10k) +
-    geom_sf(data = df_zmb_psnus %>% filter(orgunit == "Ndola District"), fill = grey20k) +
-    geom_sf(data = df_geo$TAH_Corridor_5KM, aes(fill = grey40k), alpha = 0.5) +
-    geom_sf(data = df_geo$TAH_Corridor_of_interrest, color = hw_slate) +
-    geom_sf(aes(color = within_buffer_5km, alpha = ifelse(within_buffer_5km == "TRUE", 1, 0.25)), linewidth = 1) +
-    coord_sf(xlim = c(bbox[1], bbox[3]), ylim = c(bbox[2], bbox[4])) +
-    scale_fill_identity() +
-    scale_color_manual(values = c("TRUE" = hw_orchid_bloom, "FALSE" = hw_slate), ) +
-    labs(title = glue::glue("From Kitwe, Zambia to Lobito, Angola USAID supports {fac_count_5km} facilities through PEPFAR\n that are within a 5 kilometer range of the Lobito Corridor"),
-         caption = "Source: PEPFAR DATIM 2024-05-16 | Notes: Count does not include facilities with missing coordinates") +
-    si_style_map() 
+  #Basic Map with different data sources
+   df_pts_buffered %>%
+   ggplot() +
+   geom_sf(data = df_boundaries, fill = grey10k, linewidth = 1) +
+   geom_sf(data = df_zmb_psnus %>% filter(orgunit == "Ndola District"), fill = grey20k) +
+   geom_sf(data = df_geo$TAH_Corridor_5KM, aes(fill = grey40k), alpha = 0.5) +
+   geom_sf(data = df_geo$TAH_Corridor_of_interrest, color = "#7f6e55") +
+   geom_sf(aes(color = within_buffer_5km, alpha = ifelse(within_buffer_5km == "TRUE", 1, 0.25)), linewidth = 1) +
+   coord_sf(xlim = c(bbox[1], bbox[3]), ylim = c(bbox[2], bbox[4])) +
+   scale_fill_identity() +
+   scale_color_manual(values = c("TRUE" = hw_orchid_bloom, "FALSE" = hw_slate), ) +
+   labs(
+     title = glue::glue("From Kitwe, Zambia to Lobito, Angola USAID supports {fac_count_5km} facilities through PEPFAR\n that are within a 5 kilometer range of the Lobito Corridor"),
+     caption = "Source: PEPFAR DATIM 2024-05-16 | Notes: Count does not include facilities with missing coordinates"
+   ) +
+   si_style_map()
   si_save("Graphics/Lobito_sites.svg")
 
   # Of those sites supported, what areas report into DATIM?
- site_list_themes <-  df_pts_buffered %>%
-    st_drop_geometry() %>% 
-    filter(within_buffer_5km == TRUE) %>% 
-    select(operatingunit, orgunituid, psnu, facility, has_prev_agyw_prev:has_hss_sc_curr) %>% 
-    rowwise() %>% 
-    mutate(count = sum(c_across(has_prev_agyw_prev:has_hss_sc_curr), na.rm = T)) %>% 
+  site_list_themes <- df_pts_buffered %>%
+    # st_drop_geometry() %>%
+    filter(within_buffer_5km == TRUE) %>%
+    select(operatingunit, orgunituid, psnu, facility, has_prev_agyw_prev:has_hss_sc_curr) %>%
+    rowwise() %>%
+    mutate(count = sum(c_across(has_prev_agyw_prev:has_hss_sc_curr), na.rm = T)) %>%
     pivot_longer(has_prev_agyw_prev:has_hss_sc_curr, values_drop_na = TRUE) %>%
-    mutate(theme = str_extract(name, "(?<=_)[^_]+(?=_)")) %>% 
-    distinct(operatingunit, orgunituid, facility, theme) %>% 
-    mutate(n = 1) %>% 
-    group_by(operatingunit, theme) %>% 
-    summarise(count = sum(n, na.rm = T)) %>% 
+    mutate(theme = str_extract(name, "(?<=_)[^_]+(?=_)")) %>%
+    distinct(operatingunit, orgunituid, facility, theme) %>%
+    mutate(n = 1)
+
+  site_list_themes %>%
+    group_by(operatingunit, theme) %>%
+    summarise(count = sum(n, na.rm = T)) %>%
     spread(theme, count)
-    
-    # wHAT MECHANISMS ARE SUPPORTED IN EACH COUNTRY
-    df_pts_buffered %>% 
-    st_drop_geometry() %>% 
-      filter(within_buffer_5km == TRUE) %>% 
-      count(operatingunit)
+
+  # wHAT MECHANISMS ARE SUPPORTED IN EACH COUNTRY
+  df_pts_buffered %>%
+    st_drop_geometry() %>%
+    filter(within_buffer_5km == TRUE) %>%
+    count(operatingunit)
+
+  df_pts_buffered %>%
+    # st_drop_geometry() %>%
+    filter(within_buffer_5km == TRUE) %>%
+    filter(psnu == "Kitwe District") %>%
+    ggplot() +
+    geom_sf() +
+    geom_sf_label(aes(label = facility), size = 3)
     

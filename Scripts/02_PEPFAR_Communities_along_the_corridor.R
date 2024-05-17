@@ -69,6 +69,8 @@
   
   cntries_zoi %>% gview
   
+  cntries_zoi <- st_transform(cntries_zoi, crs = st_crs(3857) )
+  
   ## ZOI - Psnu & Communities
   
   df_lvls <- get_levels(reshape = T) %>% 
@@ -101,7 +103,7 @@
   ## Corridors 
   
   spdf_corridor <- dir_gis %>% 
-    file.path("Corridor") %>% 
+    file.path() %>% 
     return_latest(pattern = "^T.*_Corridor_of_interrest.shp") %>% 
     read_sf()
   
@@ -125,17 +127,27 @@
   
   
 # MUNGE =====
-  
+  bbox <- st_bbox(spdf_cpaths %>% filter(dist == 25000))
 
+  comms_count <- spdf_comms_of_interest %>% nrow()
   
 # VIZ =====
 
    ggplot() +
-    geom_sf(data = spdf_cpaths %>% filter(dist == 25000), 
-            color = grey30k, fill = trolley_grey_light, linetype = "dotted") +
-    geom_sf(data = spdf_comms_of_interest, fill = NA, color = grey70k) +
-    geom_sf(data = spdf_corridor, color = usaid_red) +
-    si_style_map()
+    geom_sf(data = cntries_zoi, fill = grey10k, color = grey90k, linewidth = 1) +
+    geom_sf(data = spdf_cpaths %>% filter(dist == 5000), 
+            color = grey30k, fill = grey40k, linetype = "dotted") +
+    geom_sf(data = spdf_comms_of_interest, fill = hw_orchid_bloom, color = grey70k) +
+    geom_sf(data = spdf_corridor, color = hw_slate) +
+    coord_sf(xlim = c(bbox[1], bbox[3]), ylim = c(bbox[2], bbox[4])) +
+    si_style_map() +
+    labs(title = glue::glue("From Kitwe, Zambia to Lobito, Angola USAID supports {comms_count} priority subnational units along the Lobito Corridor through PEPFAR community programming\n "),
+         caption = glue("{meta$caption}")) +
+    si_style_map() 
+  si_save("Graphics/Lobito_communities.svg")
 
 # OUTPUTS =====
 
+  spdf_comms_of_interest %>% 
+    st_drop_geometry() %>% 
+    select(country, orgunit)
