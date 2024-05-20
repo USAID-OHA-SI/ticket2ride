@@ -139,6 +139,14 @@
   
 # RUN API -----------------------------------------------------------------
   
+  pull_sites(ou_name = "Angola", 
+             ou_uid = "XOivy2uDpMF", 
+             #org_type = "agyw",
+             org_type = "communty",
+             org_lvl = 5, 
+             username = datim_user(), 
+             password = datim_pwd())
+  
   df_sites <- ctry_list %>%
     pmap_dfr(~pull_sites(..1, ..2, ..3, ..4, 
                          username = datim_user(), password = datim_pwd()))

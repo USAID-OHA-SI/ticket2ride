@@ -34,7 +34,7 @@
   
   api_results_id <- "1TiNHXVletecX3uCfwUpFHZbR6dDhSMZQDHu-_ZrP0HA"
   
-  lobito_cor <- list.files("GIS", pattern = "TAH_.*.shp$", full.names = T)
+  lobito_cor <- list.files("GIS/Corridor/", pattern = "TAH_.*.shp$", full.names = T)
   
 
 # FUNCTIONS ---------------------------------------------------------------
@@ -92,7 +92,7 @@
   # Assign the ZOI projection as well so we don't have to do this later
   df_geo <- 
     lobito_cor %>% 
-    set_names(~str_remove_all(.x, "GIS/|_Buffer|\\.shp")) %>% 
+    set_names(~str_remove_all(.x, "GIS/Corridor/|_Buffer|\\.shp")) %>% 
     imap(~st_read(.x, quiet = T) %>% st_transform(., crs = zoi_crs))
   
   # Check that everythign is alinged
@@ -132,7 +132,7 @@
     mutate(within_buffer = st_within(geometry, df_geo$TAH_Corridor_5KM, sparse = F),
            within_buffer = fct_relevel(within_buffer %>% as.factor, c("TRUE", "FALSE")))
   
-  fac_count <- tmp %>% filter(within_5km == TRUE) %>% count() %>% pull(n)
+  fac_count <- tmp %>% filter(within_buffer == TRUE) %>% count() %>% pull(n)
   
   # Prototype map
   tmp %>% 
